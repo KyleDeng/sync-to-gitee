@@ -32,6 +32,7 @@ jobs:
       - name: Push to Gitee
         run: |
           git push gitee master:master --force
+          git push gitee --tags --force
         env:
           SSH_AGENT_PID: ""
           SSH_AUTH_SOCK: ""

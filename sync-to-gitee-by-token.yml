@@ -15,7 +15,7 @@ jobs:
 
       - name: Configure Git
         run: |
-          git config --global user.name "Github Action"  # 保留，不需要修改
+          git config --global user.name "GithubAction"  # 保留，不需要修改
           git config --global user.email "action@github.com"  # 保留，不需要修改
 
       - name: Add Gitee Remote
@@ -23,4 +23,6 @@ jobs:
           git remote add gitee https://${{ secrets.GITEE_USER }}:${{ secrets.GITEE_TOKEN }}@gitee.com/${{ secrets.GITEE_REPO }}.git
 
       - name: Push to Gitee
-        run: git push gitee master:master --force
+        run: |
+          git push gitee master:master --force
+          git push gitee --tags --force
