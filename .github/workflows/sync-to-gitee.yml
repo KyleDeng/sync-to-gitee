@@ -2,30 +2,37 @@ name: Sync to Gitee
 
 on:
   push:
-    branches:
-      - master  # 只同步master分支
+    branches: [ master ]  # 监听 master 分支的 push
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source code
+      - name: Checkout GitHub code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 获取完整的提交历史
+          fetch-depth: 0  # 获取所有历史记录
 
-      - name: Setup SSH key
-        uses: webfactory/ssh-agent@v0.8.0
-        with:
-          ssh-private-key: ${{ secrets.GITEE_PRIVATE_KEY }}
-
-      - name: Add Gitee remote
+      - name: Configure SSH for Gitee
         run: |
-          # 设置 Git 身份
-          git config --global user.name "GitHub Action"  # 保留，不需要修改
-          git config --global user.email "action@github.com"  # 保留，不需要改
-          # 添加 Gitee 远程仓库
-          git remote add gitee ${{ secrets.GITEE_REPO }}
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GITEE_PRIVATE_KEY }}" > ~/.ssh/gitee_key
+          chmod 600 ~/.ssh/gitee_key
+          ssh-keyscan gitee.com >> ~/.ssh/known_hosts
+
+      - name: Set Git Identity
+        run: |
+          git config --global user.name "Github Action"
+          git config --global user.email "action@github.com"
+
+      - name: Add Gitee Remote
+        run: |
+          git remote add gitee ${{ secrets.GITEE_REPO }}.git
 
       - name: Push to Gitee
-        run: git push gitee master --force    
+        run: |
+          git push gitee master:master --force
+        env:
+          SSH_AGENT_PID: ""
+          SSH_AUTH_SOCK: ""
+          GIT_SSH_COMMAND: "ssh -i ~/.ssh/gitee_key"
