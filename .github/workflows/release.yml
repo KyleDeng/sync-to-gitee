@@ -63,83 +63,73 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  sync-to-gitee:
+  sync-release-to-gitee:
     runs-on: ubuntu-latest
     needs: [release]
     steps:
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
+          name: linux-artifacts
           path: artifacts
 
-      - name: Get release version
-        id: get_version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
-
-      - name: Install jq
-        run: sudo apt-get install jq
-
-      - name: Get GitHub Release information
-        id: get_github_release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # 获取 GitHub Release 信息
-          release_info=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.ref_name }}")
-          
-          # 检查是否找到 Release
-          if echo "$release_info" | jq -e '.message == "Not Found"' > /dev/null; then
-            echo "GitHub Release not found for tag ${{ github.ref_name }}"
-            exit 1
-          fi
-          
-          # 提取 release_id 和 body
-          release_id=$(echo "$release_info" | jq -r '.id')
-          release_body=$(echo "$release_info" | jq -r '.body')
-          
-          echo "release_id=$release_id" >> $GITHUB_ENV
-          echo "release_body=$release_body" >> $GITHUB_ENV
+      - name: Get tag name
+        id: get_tag
+        run: echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Create Gitee Release
-        id: create_gitee_release
-        env:
-          GITEE_API_URL: https://gitee.com/api/v5/repos/${{ secrets.GITEE_REPO }}/releases
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
-          # 创建 Gitee Release，使用与 GitHub 相同的描述
-          response=$(curl -s -X POST "$GITEE_API_URL" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: token $GITEE_TOKEN" \
-            -d '{
-              "tag_name": "'"${{ github.ref_name }}"'"',
-              "target_commitish": "master",
-              "name": "'"${{ github.ref_name }} Release"'",
-              "body": "'"${{ env.release_body }}"'",
-              "draft": false,
-              "prerelease": false
-            }')
+          # 获取标签名
+          TAG_NAME="${{ steps.get_tag.outputs.tag_name }}"
           
-          # 提取 release_id
-          release_id=$(echo "$response" | jq -r '.id')
-          echo "release_id=$release_id" >> $GITHUB_ENV
-          echo "Release created on Gitee: $release_id"
+          # 获取 GitHub Release 信息
+          RELEASE_INFO=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG_NAME")
+          
+          RELEASE_NAME=$(echo "$RELEASE_INFO" | jq -r '.name // .tag_name')
+          RELEASE_BODY=$(echo "$RELEASE_INFO" | jq -r '.body // ""')
+          
+          # 检查 Gitee Release 是否已存在
+          EXISTING_RELEASE=$(curl -s -H "Authorization: token ${{ secrets.GITEE_TOKEN }}" \
+            "https://gitee.com/api/v5/repos/${{ secrets.GITEE_REPO }}/releases/tags/$TAG_NAME" || echo "")
+          
+          if [ "$(echo "$EXISTING_RELEASE" | jq -r '.id // empty')" != "" ]; then
+            echo "Release already exists, updating..."
+            RELEASE_ID=$(echo "$EXISTING_RELEASE" | jq -r '.id')
+            
+            # 更新现有 Release
+            curl -X PATCH \
+              -H "Authorization: token ${{ secrets.GITEE_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"name\":\"$RELEASE_NAME\",\"body\":\"$RELEASE_BODY\"}" \
+              "https://gitee.com/api/v5/repos/${{ secrets.GITEE_REPO }}/releases/$RELEASE_ID"
+          else
+            echo "Creating new release..."
+            # 创建新 Release
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.GITEE_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"tag_name\":\"$TAG_NAME\",\"name\":\"$RELEASE_NAME\",\"body\":\"$RELEASE_BODY\"}" \
+              "https://gitee.com/api/v5/repos/${{ secrets.GITEE_REPO }}/releases"
+          fi
 
       - name: Upload assets to Gitee Release
-        env:
-          GITEE_UPLOAD_URL: https://gitee.com/api/v5/repos/${{ secrets.GITEE_REPO }}/releases/${{ env.release_id }}/assets
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
-          # 遍历所有需要上传的文件
-          for file in $(find artifacts -type f); do
-            filename=$(basename "$file")
-            echo "Uploading $filename to Gitee Release..."
-            
-            # 上传文件到 Gitee Release
-            curl -s -X POST "$GITEE_UPLOAD_URL" \
-              -H "Authorization: token $GITEE_TOKEN" \
-              -F "name=$filename" \
-              -F "file=@$file"
-              
-            echo "Uploaded $filename"
+          TAG_NAME="${{ steps.get_tag.outputs.tag_name }}"
+          
+          # 获取 Gitee Release ID
+          RELEASE_INFO=$(curl -s -H "Authorization: token ${{ secrets.GITEE_TOKEN }}" \
+            "https://gitee.com/api/v5/repos/${{ secrets.GITEE_REPO }}/releases/tags/$TAG_NAME")
+          
+          RELEASE_ID=$(echo "$RELEASE_INFO" | jq -r '.id')
+          
+          # 上传构建产物
+          for file in artifacts/*; do
+            if [ -f "$file" ]; then
+              echo "Uploading $file to Gitee Release..."
+              curl -X POST \
+                -H "Authorization: token ${{ secrets.GITEE_TOKEN }}" \
+                -F "file=@$file" \
+                "https://gitee.com/api/v5/repos/${{ secrets.GITEE_REPO }}/releases/$RELEASE_ID/attach_files"
+            fi
           done
