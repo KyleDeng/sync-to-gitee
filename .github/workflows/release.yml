@@ -81,10 +81,10 @@ jobs:
           -H 'Content-Type: application/json' \
           -H 'Authorization: token ${{ secrets.GITEE_TOKEN }}' \
           -d '{
-            "tag_name": "$TAG_NAME",
+            "tag_name": "${{ github.ref_name }}",
             "target_commitish": "master",
-            "name": "Release $TAG_NAME",
-            "body": "$TAG_NAME",
+            "name": "Release ${{ github.ref_name }}",
+            "body": "${{ github.ref_name }}",
             "draft": false,
             "prerelease": false
           }')
@@ -98,5 +98,4 @@ jobs:
               curl -X POST "https://gitee.com/api/v5/repos/${{ secrets.GITEE_REPO }}/releases/$RELEASE_ID/attach_files" \
           -H "Authorization: token ${{ secrets.GITEE_TOKEN }}" \
           -F "file=@$file_path"
-            done
           done
