@@ -77,11 +77,11 @@ jobs:
         run: |
           TAG_NAME="${{ github.ref_name }}"
 
-          RELEASE_INFO=$(curl -X POST 'https://gitee.com/api/v5/repos/KyleLittlek/sync-to-gitee/releases' \
+          RELEASE_INFO=$(curl -X POST 'https://gitee.com/api/v5/repos/${{ secrets.GITEE_REPO }}/releases' \
           -H 'Content-Type: application/json' \
           -H 'Authorization: token ${{ secrets.GITEE_TOKEN }}' \
           -d '{
-            "tag_name": $TAG_NAME,
+            "tag_name": "$TAG_NAME",
             "target_commitish": "master",
             "name": "Release $TAG_NAME",
             "body": "$TAG_NAME",
@@ -95,7 +95,7 @@ jobs:
 
           find artifacts -type f | while read -r file_path; do
               echo "| $file_path"
-              curl -X POST "https://gitee.com/api/v5/repos/KyleLittlek/sync-to-gitee/releases/$RELEASE_ID/attach_files" \
+              curl -X POST "https://gitee.com/api/v5/repos/${{ secrets.GITEE_REPO }}/releases/$RELEASE_ID/attach_files" \
           -H "Authorization: token ${{ secrets.GITEE_TOKEN }}" \
           -F "file=@$file_path"
             done
