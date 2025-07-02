@@ -73,13 +73,9 @@ jobs:
           name: linux-artifacts
           path: artifacts
 
-      - name: Get tag name
-        id: get_tag
-        run: echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
       - name: Create Gitee Release
         run: |
-          TAG_NAME="${{ steps.get_tag.outputs.tag_name }}"
+          TAG_NAME="${{ github.ref_name }}"
 
           RELEASE_INFO=$(curl -X POST 'https://gitee.com/api/v5/repos/${{ secrets.GITEE_REPO }}/releases' \
           -H 'Content-Type: application/json' \
